@@ -14,6 +14,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Entidades existentes actualizadas
 model Candidate {
   id                Int               @id @default(autoincrement())
   firstName         String            @db.VarChar(100)
@@ -24,6 +25,9 @@ model Candidate {
   educations        Education[]
   workExperiences   WorkExperience[]
   resumes           Resume[]
+  applications      Application[]     // Relación con Application
+
+  @@index([email]) // Índice para búsquedas rápidas por email
 }
 
 model Education {
@@ -33,7 +37,9 @@ model Education {
   startDate     DateTime
   endDate       DateTime?
   candidateId   Int
-  candidate     Candidate @relation(fields: [candidateId], references: [id])
+  candidate     Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@index([candidateId]) // Índice para búsquedas relacionadas
 }
 
 model WorkExperience {
@@ -44,14 +50,139 @@ model WorkExperience {
   startDate   DateTime
   endDate     DateTime?
   candidateId Int
-  candidate   Candidate @relation(fields: [candidateId], references: [id])
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@index([candidateId]) // Índice para búsquedas relacionadas
 }
 
 model Resume {
   id          Int       @id @default(autoincrement())
   filePath    String    @db.VarChar(500)
   fileType    String    @db.VarChar(50)
-  uploadDate  DateTime
+  uploadDate  DateTime  @default(now())
   candidateId Int
-  candidate   Candidate @relation(fields: [candidateId], references: [id])
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@index([candidateId]) // Índice para búsquedas relacionadas
+}
+
+// Nuevas entidades según el ERD
+
+model Company {
+  id          Int         @id @default(autoincrement())
+  name        String      @db.VarChar(100)
+  employees   Employee[]
+  positions   Position[]
+
+  @@index([name]) // Índice para búsquedas por nombre
+}
+
+model Employee {
+  id          Int         @id @default(autoincrement())
+  companyId   Int
+  name        String      @db.VarChar(100)
+  email       String      @unique @db.VarChar(255)
+  role        String      @db.VarChar(50)
+  isActive    Boolean     @default(true)
+  company     Company     @relation(fields: [companyId], references: [id])
+  interviews  Interview[]
+
+  @@index([companyId]) // Índice por compañía
+  @@index([email]) // Índice para búsquedas por email
+}
+
+model InterviewType {
+  id          Int              @id @default(autoincrement())
+  name        String           @db.VarChar(100)
+  description String?          @db.Text
+  steps       InterviewStep[]
+
+  @@index([name]) // Índice para búsquedas por nombre
+}
+
+model InterviewFlow {
+  id          Int              @id @default(autoincrement())
+  description String           @db.VarChar(200)
+  steps       InterviewStep[]
+  positions   Position[]
+}
+
+model InterviewStep {
+  id               Int            @id @default(autoincrement())
+  interviewFlowId  Int
+  interviewTypeId  Int
+  name             String         @db.VarChar(100)
+  orderIndex       Int            // Para mantener el orden de los pasos
+  flow             InterviewFlow  @relation(fields: [interviewFlowId], references: [id])
+  type             InterviewType  @relation(fields: [interviewTypeId], references: [id])
+  interviews       Interview[]
+
+  @@index([interviewFlowId]) // Índice para relación con flujo
+  @@index([interviewTypeId]) // Índice para relación con tipo
+}
+
+model Position {
+  id                  Int            @id @default(autoincrement())
+  companyId           Int
+  interviewFlowId     Int
+  title               String         @db.VarChar(100)
+  description         String         @db.Text
+  status              String         @db.VarChar(50) // ej: "active", "closed", "draft"
+  isVisible           Boolean        @default(true)
+  location            String         @db.VarChar(100)
+  jobDescription      String         @db.Text
+  requirements        String         @db.Text
+  responsibilities    String         @db.Text
+  salaryMin           Decimal?       @db.Decimal(10, 2)
+  salaryMax           Decimal?       @db.Decimal(10, 2)
+  employmentType      String         @db.VarChar(50) // ej: "full-time", "part-time", "contract"
+  benefits            String?        @db.Text
+  companyDescription  String?        @db.Text
+  applicationDeadline DateTime?
+  contactInfo         String?        @db.VarChar(255)
+  company             Company        @relation(fields: [companyId], references: [id])
+  interviewFlow       InterviewFlow  @relation(fields: [interviewFlowId], references: [id])
+  applications        Application[]
+
+  @@index([companyId]) // Índice para relación con compañía
+  @@index([status]) // Índice para filtrar por status
+  @@index([location]) // Índice para búsquedas por ubicación
+  @@index([employmentType]) // Índice para filtrar por tipo de empleo
+}
+
+model Application {
+  id                Int         @id @default(autoincrement())
+  positionId        Int
+  candidateId       Int
+  applicationDate   DateTime    @default(now())
+  status            String      @db.VarChar(50) // ej: "pending", "in-progress", "accepted", "rejected"
+  notes             String?     @db.Text
+  position          Position    @relation(fields: [positionId], references: [id])
+  candidate         Candidate   @relation(fields: [candidateId], references: [id])
+  interviews        Interview[]
+
+  @@index([positionId]) // Índice para relación con posición
+  @@index([candidateId]) // Índice para relación con candidato
+  @@index([status]) // Índice para filtrar por status
+  @@index([applicationDate]) // Índice para ordenar por fecha
+}
+
+model Interview {
+  id               Int            @id @default(autoincrement())
+  applicationId    Int
+  interviewStepId  Int
+  employeeId       Int
+  interviewDate    DateTime
+  result           String?        @db.VarChar(50) // ej: "pass", "fail", "pending"
+  score            Int?
+  notes            String?        @db.Text
+  application      Application    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  interviewStep    InterviewStep  @relation(fields: [interviewStepId], references: [id])
+  employee         Employee       @relation(fields: [employeeId], references: [id])
+
+  @@index([applicationId]) // Índice para relación con aplicación
+  @@index([interviewStepId]) // Índice para relación con paso de entrevista
+  @@index([employeeId]) // Índice para relación con empleado
+  @@index([interviewDate]) // Índice para ordenar por fecha
+  @@index([result]) // Índice para filtrar por resultado
 }
